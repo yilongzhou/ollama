@@ -5,9 +5,6 @@
 html,
 body {
   background: transparent;
-}
-
-.drag {
   -webkit-app-region: drag;
 }
 
