@@ -113,27 +113,29 @@ export default function () {
     setCurrentModel('')
 
     ipcRenderer.send('go-back')
-  }  
+  }
 
   return (
     <div className='flex min-h-screen flex-1 flex-col justify-between bg-white'>
-
-      <header className='sticky px-16 sm:px-20 md:px-40 lg:px-60 xl:px-80 top-0 z-40 flex h-14 w-full flex-row items-center border-b border-black/10 bg-white/75 backdrop-blur-md'>
-        {models.length > 0 && 
-          <>
-            {currentModel ? (
-              <>
-                <HiChevronLeft className='text-2xl cursor-pointer' onClick={handleGoBack} />      
-                <div className='text-sm font-medium ml-2 truncate'>
-                  {path.basename(currentModel).replace('.bin', '')}
-                </div>
-              </>
-            ) : (
-              <div className='text-sm font-medium ml-2 truncate'>Select a model</div>
-            )}
-          </>
-        }
+      <header>
+          <HiChevronLeft className='text-2xl cursor-pointer' onClick={handleGoBack} />      
+        <div className='sticky px-16 sm:px-20 md:px-40 lg:px-60 xl:px-80 top-0 z-40 flex h-14 w-full flex-row items-center border-b border-black/10 bg-white/75 backdrop-blur-md'>
+          {models.length > 0 && 
+            <>
+              {currentModel ? (
+                <>
+                  <div className='text-sm font-medium ml-2 truncate'>
+                    {path.basename(currentModel).replace('.bin', '')}
+                  </div>
+                </>
+              ) : (
+                <div className='text-sm font-medium ml-2 truncate'>Select a model</div>
+              )}
+            </>
+          }
+        </div>
       </header>
+      <HiChevronLeft className='text-2xl cursor-pointer' onClick={handleGoBack} />      
 
       {models.length > 0 && (
         <section className='mx-auto mb-10 w-full px-4 sm:px-20 md:px-40 lg:px-60 xl:px-80 flex-1 break-words'>
@@ -180,24 +182,40 @@ export default function () {
         </section>
       )}
       {models.length === 0 && (
-        <section className='flex flex-1 select-none flex-col items-center justify-center pb-20'>
+        <section 
+          onDrop={(e) => {
+            e.preventDefault()
+            
+            const files = e.dataTransfer.files;
+            const filePaths = Array.from(files).map((f) => f.path)
+
+            setModels(filePaths)
+            setCurrentModel(filePaths[0])
+          }} 
+          onDragOver={(e) => e.preventDefault()}
+          className='flex flex-1 select-none flex-col items-center justify-center align-middle'
+        >
           <h2 className='text-3xl font-light text-neutral-400'>No model selected</h2>
           <button
             onClick={async () => {
               const res = await dialog.showOpenDialog(getCurrentWindow(), {
+                filters: [ { name: 'Model Files', extensions: ['bin'] } ],
                 properties: ['openFile', 'multiSelections'],
               })
               if (res.canceled) {
                 return
               }
 
+              // check type
+
               setModels(res.filePaths)
               setCurrentModel(res.filePaths[0])
             }}
-            className='rounded-dm my-8 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:brightness-110'
+            className='rounded-dm mt-8 mb-2 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:brightness-110'
           >
             Open file...
           </button>
+          <p className='text-sm text-neutral-400'>or drop files here</p>
         </section>
       )}
       <div className='sticky bottom-0 bg-gradient-to-b from-transparent to-white px-4 sm:px-20 md:px-40 lg:px-60 xl:px-80'>

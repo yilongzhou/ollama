@@ -5,11 +5,12 @@
 html,
 body {
   background: transparent;
-}
-
-.drag {
   -webkit-app-region: drag;
 }
+
+/* .drag {
+  -webkit-app-region: drag;
+} */
 
 .blink {
   -webkit-animation: 1s blink step-end infinite;
