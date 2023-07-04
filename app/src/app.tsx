@@ -4,8 +4,6 @@ import os from 'os'
 import { dialog, getCurrentWindow } from '@electron/remote'
 import { HiChevronLeft } from 'react-icons/hi'
 
-const { ipcRenderer } = window.require('electron')
-
 const API_URL = 'http://127.0.0.1:7734'
 
 type Message = {
@@ -16,6 +14,7 @@ type Message = {
 const userInfo = os.userInfo()
 
 async function generate(prompt: string, model: string, callback: (res: string) => void) {
+  console.log('get generate ? ')
   const result = await fetch(`${API_URL}/generate`, {
     method: 'POST',
     headers: {
@@ -56,6 +55,8 @@ async function generate(prompt: string, model: string, callback: (res: string) =
         break
       }
     }
+
+    console.log(messages)
   }
 
   return
@@ -69,11 +70,8 @@ async function getModels() {
       },
     })
 
-    const data = await result.json()
-    console.log(data)
-    return data
+    return await result.json()
   } catch (error) {
-    console.error(error)
     return []
   }
 }
@@ -109,31 +107,52 @@ export default function () {
     textarea.style.height = ""
   }
 
-  function handleGoBack() {
-    setCurrentModel('')
-
-    ipcRenderer.send('go-back')
-  }  
-
   return (
-    <div className='flex min-h-screen flex-1 flex-col justify-between bg-white'>
+    <div className='flex min-h-screen drag flex-1 flex-col justify-between bg-white'>
+      {models.length > 0 && (
+        <>
+          {currentModel ? (
+            <header className='drag sticky px-16 sm:px-20 md:px-40 lg:px-60 xl:px-80 top-0 z-40 flex h-14 w-full items-center border-b border-black/10 bg-white/75 backdrop-blur-md'>
+              <HiChevronLeft className='no-drag text-2xl cursor-pointer' 
+                onClick={() => {
+                  if (generating) { 
+                    return
+                  }
 
-      <header className='sticky px-16 sm:px-20 md:px-40 lg:px-60 xl:px-80 top-0 z-40 flex h-14 w-full flex-row items-center border-b border-black/10 bg-white/75 backdrop-blur-md'>
-        {models.length > 0 && 
-          <>
-            {currentModel ? (
-              <>
-                <HiChevronLeft className='text-2xl cursor-pointer' onClick={handleGoBack} />      
-                <div className='text-sm font-medium ml-2 truncate'>
-                  {path.basename(currentModel).replace('.bin', '')}
-                </div>
-              </>
-            ) : (
+                  setCurrentModel('')
+                  setMessages([])
+                }} />      
+              <div className='text-sm font-medium ml-2 truncate'>
+                {path.basename(currentModel).replace('.bin', '')}
+              </div>
+            </header>
+          ) : (      
+            <header className='drag sticky px-16 sm:px-20 md:px-40 lg:px-60 xl:px-80 top-0 z-40 border-b border-black/10 bg-white/75 backdrop-blur-md h-14 w-full flex justify-between items-center'>
               <div className='text-sm font-medium ml-2 truncate'>Select a model</div>
-            )}
-          </>
-        }
-      </header>
+                <button
+                  onClick={async () => {
+                    const res = await dialog.showOpenDialog(getCurrentWindow(), {
+                      properties: ['openFile', 'multiSelections'],
+                      filters: [ { name: 'Model Files', extensions: ['bin'] } ],
+                    })
+                    if (res.canceled) {
+                      return
+                    }
+
+                    const selectedFiles = res.filePaths.filter(
+                      filePath => !models.includes(filePath)
+                    );
+
+                    setModels([...models, ...selectedFiles])
+                  }}
+                  className='no-drag rounded-dm rounded-md border border-black/10 bg-transparent px-4 py-2 text-sm hover:border-black/50'
+                >
+                  Import from files...
+                </button>
+            </header>
+          )}
+        </>
+      )}
 
       {models.length > 0 && (
         <section className='mx-auto mb-10 w-full px-4 sm:px-20 md:px-40 lg:px-60 xl:px-80 flex-1 break-words'>
@@ -152,7 +171,7 @@ export default function () {
                       </div>
                     )}
                   </div>
-                  <div className='flex-1 text-gray-800'>
+                  <div className='flex-1 text-gray-800 whitespace-pre-line'>
                     {m.content}
                     {m.sender === 'bot' && generating && i === messages.length - 1 && (
                       <span className='blink relative -top-[3px] left-1 text-[10px]'>█</span>
@@ -166,13 +185,21 @@ export default function () {
               {models.map((model, i) => (
                 <div
                   key={i}
-                  onClick={() => {
-                    setCurrentModel(model)
-                    setMessages([])
-                  }}
-                  className='cursor-pointer hover:bg-gray-100 p-4 border-b border-black/10'
+                  className='p-4 border-b border-black/10 flex justify-between items-center'
                 >
-                  {path.basename(model).replace('.bin', '')}
+                  <div className='truncate'>
+                    {path.basename(model).replace('.bin', '')}
+                  </div>
+                  <button 
+                    type='button'
+                    className='rounded-dm w-24 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:brightness-110'
+                    onClick={() => {
+                      setCurrentModel(model)
+                      setMessages([])
+                    }}
+                  >
+                    Chat              
+                  </button>
                 </div>
               ))}
             </>
@@ -180,24 +207,59 @@ export default function () {
         </section>
       )}
       {models.length === 0 && (
-        <section className='flex flex-1 select-none flex-col items-center justify-center pb-20'>
-          <h2 className='text-3xl font-light text-neutral-400'>No model selected</h2>
-          <button
-            onClick={async () => {
-              const res = await dialog.showOpenDialog(getCurrentWindow(), {
-                properties: ['openFile', 'multiSelections'],
-              })
-              if (res.canceled) {
-                return
-              }
+        <section 
+          onDrop={(e) => {
+            e.preventDefault()
 
-              setModels(res.filePaths)
-              setCurrentModel(res.filePaths[0])
-            }}
-            className='rounded-dm my-8 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:brightness-110'
-          >
-            Open file...
-          </button>
+            const files = Array.from(e.dataTransfer.files)
+
+            const allowedFileTypes = ['bin']
+            const validFiles = files.filter((file) => allowedFileTypes.includes(file.name.split('.').pop()))
+
+            if (validFiles.length === 0) {
+              return
+            }
+
+            const filePaths = Array.from(validFiles).map((f) => f.path)
+
+            setModels([...models, ...filePaths])
+            setCurrentModel(filePaths[0])
+          }} 
+          onDragOver={(e) => e.preventDefault()}
+          className='flex flex-1 select-none flex-col items-center justify-center align-middle'
+        >
+          <div className = 'flex flex-col items-center justify-center align-middle'>          
+            <h2 className='text-3xl font-light text-neutral-400'>No model selected</h2>
+            <button
+              onClick={async () => {
+                console.log('open')
+                const res = await dialog.showOpenDialog(getCurrentWindow(), {
+                  properties: ['openFile', 'multiSelections'],
+                  filters: [ { name: 'Model Files', extensions: ['bin'] } ],
+                })
+                if (res.canceled) {
+                  return
+                }
+
+                const selectedFiles = res.filePaths.filter(
+                  filePath => !models.includes(filePath)
+                );
+
+                setModels([...models, ...selectedFiles])
+
+                if (selectedFiles.length > 0) { 
+                  setCurrentModel(res.filePaths[0])
+                } else {
+                  setCurrentModel('')
+                }
+
+              }}
+              className='rounded-dm mt-8 mb-4 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:brightness-110'
+            >
+              Open file...
+            </button>
+            <p className='text-sm text-neutral-400'>or drop files here</p>
+          </div>
         </section>
       )}
       <div className='sticky bottom-0 bg-gradient-to-b from-transparent to-white px-4 sm:px-20 md:px-40 lg:px-60 xl:px-80'>
