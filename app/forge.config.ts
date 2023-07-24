@@ -40,7 +40,14 @@ const config: ForgeConfig = {
       : {}),
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin'])],
+  makers: [
+    new MakerSquirrel({
+      name: 'Ollama',
+      authors: 'jmorganca',
+      exe: 'ollama.exe',
+    }),
+    new MakerZIP({}, 
+    ['darwin'])],
   publishers: [
     new PublisherGithub({
       repository: {
