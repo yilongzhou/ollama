@@ -6,3 +6,4 @@
 dist
 ollama
 ggml-metal.metal
+app/Ollama.app/Contents/MacOS/Ollama

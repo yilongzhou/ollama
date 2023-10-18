@@ -1,6 +1,6 @@
 package app
 
-// TODO: build me with backwards compatibility to macOS 11
+// TODO: build against macOS 11 framework
 
 // #cgo CFLAGS: -x objective-c
 // #cgo LDFLAGS: -framework Cocoa
@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -24,9 +25,17 @@ import (
 )
 
 func Run() {
-	// TODO: auto update loop
-	// Look for a new update
-	// Download it to a temporary location
+	// start the auto update loop
+	go func() {
+		for {
+			err := updater()
+			if err != nil {
+				log.Printf("couldn't check for update: %v", err)
+			}
+
+			time.Sleep(60 * time.Minute)
+		}
+	}()
 
 	// run the ollama server on port 11434
 	// TODO: run this based on the user's preferences
@@ -39,41 +48,40 @@ func Run() {
 	var origins []string
 	go server.Serve(ln, origins)
 
-	ticker := time.NewTicker(60 * time.Second)
-	defer ticker.Stop()
-
-	go func() {
-		err := check()
-		if err != nil {
-			log.Printf("couldnt check for update: %v", err)
-		}
-		for range ticker.C {
-			err = check()
-			if err != nil {
-				log.Printf("couldnt check for update: %v", err)
-			}
-		}
-	}()
-
 	// Run the native macOS app
 	C.run()
 }
 
-//export Restart
-func Restart() {
-	fmt.Println("restart clicked")
-}
-
 //export Quit
 func Quit() {
-	os.Exit(0)
+	syscall.Kill(os.Getpid(), syscall.SIGTERM)
 }
 
-func check() error {
+var script = `
+PID=%d
+APP_PATH="%s"
+TMP_DIR="%s"
+BACKUP_DIR="$TMP_DIR/OllamaBackup.app"
+ZIP_FILE="%s"
+
+rm -rf "$TMP_DIR/Ollama.app" "$BACKUP_DIR"
+unzip "$ZIP_FILE" -d "$TMP_DIR"
+kill $PID
+while kill -0 $PID; do
+    sleep 0.05
+done
+
+mv "$APP_PATH" "$BACKUP_DIR"
+mv "$TMP_DIR/Ollama.app" "$APP_PATH"
+open "$APP_PATH"
+`
+
+func updater() error {
 	// make get request to ollama.ai/api/update
 	// TODO: add missing request headers (signature, user agent, etc.)
 
-	url := fmt.Sprintf("https://ollama.ai/api/update?version=%s", version.Version)
+	url := fmt.Sprintf("https://ollama.ai/api/update?version=%s&arch=%s&os=%s", version.Version, runtime.GOARCH, runtime.GOOS)
+	fmt.Println(url)
 
 	// Make the GET request
 	resp, err := http.Get(url)
@@ -96,17 +104,18 @@ func check() error {
 		return fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	var response struct {
-		Url string `json:"url"`
+	var update struct {
+		Url  string `json:"url"`
+		Size int    `json:"size"`
 	}
 
-	json.Unmarshal(body, &response)
+	json.Unmarshal(body, &update)
 
-	// TODO: skip download if the file is already downloaded with the same filesize and checksum
+	// TODO: skip download if the file is already downloaded with the same name, filesize and checksum
 
-	log.Printf("downloading update... %s", response.Url)
+	log.Printf("downloading update... %s", update.Url)
 
-	resp, err = http.Get(response.Url)
+	resp, err = http.Get(update.Url)
 	if err != nil {
 		return fmt.Errorf("failed to download update: %v", err)
 	}
@@ -116,63 +125,45 @@ func check() error {
 		return fmt.Errorf("download failed with status: %d", resp.StatusCode)
 	}
 
-	// Create a temporary file
-	f, err := os.CreateTemp("", "ollama-update-*.zip")
+	f, err := os.CreateTemp("", "ollama-*.zip")
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	log.Printf("creating temp file %s...", f.Name())
+	zipfile := f.Name()
+
+	log.Printf("creating temp file %s...", zipfile)
 
 	_, err = io.Copy(f, resp.Body)
 	if err != nil {
 		return err
 	}
 
-	log.Print("performing update...")
+	// TODO: validate sha256 as well
+	log.Printf("validating update filesize...")
+	// fi, err := os.Stat(zipfile)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to stat downloaded file: %v", err)
+	// }
 
-	return update(f.Name())
-}
+	// if fi.Size() != int64(update.Size) {
+	// 	return fmt.Errorf("downloaded file size %d does not match expected size %d", fi.Size(), update.Size)
+	// }
 
-type params struct {
-	AppPath string
-	ZipPath string
-	Pid     int
-}
+	log.Printf("performing update with %s...", zipfile)
 
-var script = `
-PID=%d
-APP_DIR="%s"
-BACKUP_DIR="%s/OllamaBackup.app"
-ZIP_PATH="%s"
-
-on_error() {
-    mv "$BACKUP_DIR" "$APP_DIR"
-}
-
-trap on_error ERR
-
-kill $PID
-mv "$APP_DIR" "$BACKUP_DIR"
-unzip "$ZIP_PATH" -d "$(dirname $APP_DIR)"
-open "$APP_DIR"
-`
-
-func update(zipdir string) error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("couldnt determine executable path")
 	}
 
-	appdir, ok := strings.CutSuffix(execPath, "/Contents/MacOS/Ollama")
+	appPath, ok := strings.CutSuffix(execPath, "/Contents/MacOS/Ollama")
 	if !ok {
 		return fmt.Errorf("could not find the .app directory in the path of %s", execPath)
 	}
 
-	arg := fmt.Sprintf(script, os.Getpid(), appdir, os.TempDir(), zipdir)
-
-	fmt.Println(arg)
+	arg := fmt.Sprintf(script, os.Getpid(), appPath, os.TempDir(), zipfile)
 
 	cmd := exec.Command("/bin/bash", "-c", arg)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
