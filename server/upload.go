@@ -95,6 +95,7 @@ func (b *blobUpload) Prepare(ctx context.Context, requestURL *url.URL, opts *Reg
 			size = fi.Size() - offset
 		}
 
+		// set part.N to the current number of parts
 		b.Parts = append(b.Parts, blobUploadPart{N: len(b.Parts), Offset: offset, Size: size})
 		offset += size
 	}
@@ -111,22 +112,22 @@ func (b *blobUpload) Prepare(ctx context.Context, requestURL *url.URL, opts *Reg
 	return nil
 }
 
+// Run uploads blob parts to the upstream. If the upstream supports redirection, parts will be uploaded
+// in parallel as defined by Prepare. Otherwise, parts will be uploaded serially. Run sets b.err on error.
 func (b *blobUpload) Run(ctx context.Context, opts *RegistryOptions) {
-	b.err = b.run(ctx, opts)
-}
-
-func (b *blobUpload) run(ctx context.Context, opts *RegistryOptions) error {
 	defer blobUploadManager.Delete(b.Digest)
 	ctx, b.CancelFunc = context.WithCancel(ctx)
 
 	p, err := GetBlobsPath(b.Digest)
 	if err != nil {
-		return err
+		b.err =  err
+		return
 	}
 
 	f, err := os.Open(p)
 	if err != nil {
-		return err
+		b.err = err
+		return
 	}
 	defer f.Close()
 
@@ -157,7 +158,8 @@ func (b *blobUpload) run(ctx context.Context, opts *RegistryOptions) error {
 	}
 
 	if err := g.Wait(); err != nil {
-		return err
+		b.err = err
+		return
 	}
 
 	requestURL := <-b.nextURL
@@ -172,12 +174,12 @@ func (b *blobUpload) run(ctx context.Context, opts *RegistryOptions) error {
 
 	resp, err := makeRequest(ctx, "PUT", requestURL, headers, nil, opts)
 	if err != nil {
-		return err
+		b.err = err
+		return
 	}
 	defer resp.Body.Close()
 
 	b.done = true
-	return nil
 }
 
 func (b *blobUpload) uploadChunk(ctx context.Context, method string, requestURL *url.URL, rs io.ReadSeeker, part *blobUploadPart, opts *RegistryOptions) error {
