@@ -11,6 +11,7 @@ import (
 )
 
 func main() {
+	// if executing in a .app directory on macOS, start the app
 	execPath, _ := os.Executable()
 	if strings.HasSuffix(execPath, ".app/Contents/MacOS/Ollama") {
 		app.Run()

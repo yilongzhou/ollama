@@ -2,8 +2,8 @@ package app
 
 // TODO: build against macOS 11 framework
 
-// #cgo CFLAGS: -x objective-c
-// #cgo LDFLAGS: -framework Cocoa
+// #cgo CFLAGS: -x objective-c -Wno-deprecated-declarations
+// #cgo LDFLAGS: -framework Cocoa -framework LocalAuthentication
 // #include "app.h"
 import "C"
 import (
@@ -15,32 +15,64 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jmorganca/ollama/server"
 	"github.com/jmorganca/ollama/version"
 )
 
+func logfile() (*os.File, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve user home directory: %v", err)
+	}
+
+	logdir := filepath.Join(home, ".ollama", "logs")
+	logfile := filepath.Join(logdir, "server.log")
+
+	err = os.MkdirAll(logdir, 0755)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create log directory: %v", err)
+	}
+
+	file, err := os.OpenFile(logfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %v", err)
+	}
+
+	return file, nil
+}
+
 func Run() {
-	// start the auto update loop
-	go func() {
-		for {
-			err := updater()
-			if err != nil {
-				log.Printf("couldn't check for update: %v", err)
-			}
+	C.killOtherInstances()
 
-			time.Sleep(60 * time.Minute)
-		}
-	}()
+	// start auto updates
+	// go func() {
+	// 	for {
+	// 		updater()
+	// 		time.Sleep(time.Hour)
+	// 	}
+	// }()
 
-	// run the ollama server on port 11434
-	// TODO: run this based on the user's preferences
-	host, port := "127.0.0.1", "11434"
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	// log to ~/.ollama/logs/server.log
+	// TODO (jmorganca): rotate logs if file is too big
+	// TODO (jmorganca): use `log` package instead of redirecting
+	// TODO (jmorganca): also print to stdout and stderr for easier debugging
+	f, err := logfile()
+	if err != nil {
+		log.Fatalf("failed to configure logging: %v", err)
+	}
+	os.Stdout = f
+	os.Stderr = f
+	log.SetOutput(f)
+	gin.DefaultWriter = f
+
+	// run the ollama server
+	ln, err := net.Listen("tcp", "127.0.0.1:11434")
 	if err != nil {
 		log.Fatalf("error listening: %v", err)
 	}
@@ -48,7 +80,7 @@ func Run() {
 	var origins []string
 	go server.Serve(ln, origins)
 
-	// Run the native macOS app
+	// Finally run the main loop of the macOS app
 	C.run()
 }
 
