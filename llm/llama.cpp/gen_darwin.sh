@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # This script is intended to run inside the go generate
 # working directory must be ../llm/llama.cpp
 

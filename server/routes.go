@@ -25,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/jmorganca/ollama/api"
+	"github.com/jmorganca/ollama/gpu"
 	"github.com/jmorganca/ollama/llm"
 	"github.com/jmorganca/ollama/parser"
 	"github.com/jmorganca/ollama/version"
@@ -880,9 +881,12 @@ func Serve(ln net.Listener, allowOrigins []string) error {
 		os.Exit(0)
 	}()
 
-	if runtime.GOOS == "linux" {
+	if err := llm.Init(workDir); err != nil {
+		return fmt.Errorf("unable to initialize llm library %w", err)
+	}
+	if runtime.GOOS == "linux" { // TODO - windows too
 		// check compatibility to log warnings
-		if _, err := llm.CheckVRAM(); err != nil {
+		if _, err := gpu.CheckVRAM(); err != nil {
 			log.Print(err.Error())
 		}
 	}
