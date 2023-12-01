@@ -49,6 +49,8 @@ type Model struct {
 	Options        map[string]interface{}
 }
 
+var errInvalidRole = fmt.Errorf("invalid role")
+
 type PromptVars struct {
 	System   string
 	Prompt   string
@@ -119,7 +121,7 @@ func (m *Model) ChatPrompt(msgs []api.Message) (string, error) {
 				return "", err
 			}
 		default:
-			return "", fmt.Errorf("invalid role: %s, role must be one of [system, user, assistant]", msg.Role)
+			return "", fmt.Errorf("%w: %s, role must be one of [system, user, assistant]", errInvalidRole, msg.Role)
 		}
 	}
 

@@ -821,6 +821,9 @@ func Serve(ln net.Listener, allowOrigins []string) error {
 	r.POST("/api/blobs/:digest", CreateBlobHandler)
 	r.HEAD("/api/blobs/:digest", HeadBlobHandler)
 
+	// openai compatible endpoints
+	r.POST("/openai/chat/completions", ChatCompletions)
+
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		r.Handle(method, "/", func(c *gin.Context) {
 			c.String(http.StatusOK, "Ollama is running")
@@ -936,14 +939,13 @@ func ChatHandler(c *gin.Context) {
 		return
 	}
 
-	sessionDuration := defaultSessionDuration
-	model, err := load(c, req.Model, req.Options, sessionDuration)
+	ch, err := chat(c, req, checkpointStart)
 	if err != nil {
 		var pErr *fs.PathError
 		switch {
 		case errors.As(err, &pErr):
 			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("model '%s' not found, try pulling it first", req.Model)})
-		case errors.Is(err, api.ErrInvalidOpts):
+		case errors.Is(err, api.ErrInvalidOpts), errors.As(err, errInvalidRole):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -951,10 +953,33 @@ func ChatHandler(c *gin.Context) {
 		return
 	}
 
-	// an empty request loads the model
-	if len(req.Messages) == 0 {
-		c.JSON(http.StatusOK, api.ChatResponse{CreatedAt: time.Now().UTC(), Model: req.Model, Done: true})
+	if req.Stream != nil && !*req.Stream {
+		// Wait for the channel to close
+		var r api.ChatResponse
+		var sb strings.Builder
+		for resp := range ch {
+			var ok bool
+			if r, ok = resp.(api.ChatResponse); !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if r.Message != nil {
+				sb.WriteString(r.Message.Content)
+			}
+		}
+		r.Message = &api.Message{Role: "assistant", Content: sb.String()}
+		c.JSON(http.StatusOK, r)
 		return
+	}
+
+	streamResponse(c, ch)
+}
+
+func chat(c *gin.Context, req api.ChatRequest, checkpointStart time.Time) (chan any, error) {
+	sessionDuration := defaultSessionDuration
+	model, err := load(c, req.Model, req.Options, sessionDuration)
+	if err != nil {
+		return nil, err
 	}
 
 	checkpointLoaded := time.Now()
@@ -962,7 +987,7 @@ func ChatHandler(c *gin.Context) {
 	prompt, err := model.ChatPrompt(req.Messages)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+		return nil, err
 	}
 
 	ch := make(chan any)
@@ -971,6 +996,11 @@ func ChatHandler(c *gin.Context) {
 		defer close(ch)
 
 		fn := func(r llm.PredictResult) {
+			// an empty request loads the model
+			if len(req.Messages) == 0 {
+				ch <- api.ChatResponse{CreatedAt: time.Now().UTC(), Model: req.Model, Done: true}
+				return
+			}
 			// Update model expiration
 			loaded.expireAt = time.Now().Add(sessionDuration)
 			loaded.expireTimer.Reset(sessionDuration)
@@ -1009,24 +1039,5 @@ func ChatHandler(c *gin.Context) {
 		}
 	}()
 
-	if req.Stream != nil && !*req.Stream {
-		// Wait for the channel to close
-		var r api.ChatResponse
-		var sb strings.Builder
-		for resp := range ch {
-			var ok bool
-			if r, ok = resp.(api.ChatResponse); !ok {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			if r.Message != nil {
-				sb.WriteString(r.Message.Content)
-			}
-		}
-		r.Message = &api.Message{Role: "assistant", Content: sb.String()}
-		c.JSON(http.StatusOK, r)
-		return
-	}
-
-	streamResponse(c, ch)
+	return ch, nil
 }
