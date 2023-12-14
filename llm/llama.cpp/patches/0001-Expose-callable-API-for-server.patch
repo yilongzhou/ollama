@@ -1,19 +1,20 @@
-From 3f5d988a23fe44393b985a1254a9f05ec33a9141 Mon Sep 17 00:00:00 2001
-From: Daniel Hiltgen <daniel@ollama.com>
-Date: Mon, 13 Nov 2023 12:25:58 -0800
+From 5671a80d321de622a1702b1cc724505dbaa0fbc3 Mon Sep 17 00:00:00 2001
+From: Bruce MacDonald <brucewmacdonald@gmail.com>
+Date: Thu, 14 Dec 2023 17:09:40 -0500
 Subject: [PATCH] Expose callable API for server
 
-This adds an extern "C" interface within the example server
 ---
  examples/server/CMakeLists.txt |  24 +++
- examples/server/server.cpp     | 274 +++++++++++++++++++++++++++++++++
- examples/server/server.h       |  89 +++++++++++
+ examples/server/server.cpp     | 309 +++++++++++++++++++++++++++++++++
+ examples/server/server.h       |  89 ++++++++++
  ggml-cuda.cu                   |   1 +
- 4 files changed, 388 insertions(+)
+ llama.cpp                      |  25 +++
+ llama.h                        |   7 +
+ 6 files changed, 455 insertions(+)
  create mode 100644 examples/server/server.h
 
 diff --git a/examples/server/CMakeLists.txt b/examples/server/CMakeLists.txt
-index 859cd12..4ea47a7 100644
+index 859cd12c..4ea47a77 100644
 --- a/examples/server/CMakeLists.txt
 +++ b/examples/server/CMakeLists.txt
 @@ -11,3 +11,27 @@ if (WIN32)
@@ -46,7 +47,7 @@ index 859cd12..4ea47a7 100644
 +endif()
 \ No newline at end of file
 diff --git a/examples/server/server.cpp b/examples/server/server.cpp
-index d0cd8e1..938b4eb 100644
+index d0cd8e1c..d15a1148 100644
 --- a/examples/server/server.cpp
 +++ b/examples/server/server.cpp
 @@ -5,6 +5,9 @@
@@ -59,7 +60,16 @@ index d0cd8e1..938b4eb 100644
  
  #ifndef NDEBUG
  // crash the server in debug mode, otherwise send an http 500 error
-@@ -2632,6 +2635,7 @@ static void append_to_generated_text_from_generated_token_probs(llama_server_con
+@@ -24,6 +27,8 @@
+ #include <thread>
+ #include <mutex>
+ #include <chrono>
++#include <iostream>
++#include <mach/mach.h>
+ 
+ #ifndef SERVER_VERBOSE
+ #define SERVER_VERBOSE 1
+@@ -2632,6 +2637,7 @@ static void append_to_generated_text_from_generated_token_probs(llama_server_con
      }
  }
  
@@ -67,7 +77,7 @@ index d0cd8e1..938b4eb 100644
  int main(int argc, char **argv)
  {
      // own arguments required by this example
-@@ -3066,3 +3070,273 @@ int main(int argc, char **argv)
+@@ -3066,3 +3072,306 @@ int main(int argc, char **argv)
      llama_backend_free();
      return 0;
  }
@@ -78,11 +88,30 @@ index d0cd8e1..938b4eb 100644
 +std::atomic<bool> ext_server_running(false);
 +std::thread ext_server_thread;
 +
++static int64_t mem_available() {
++    int mib[2];
++    size_t length;
++    int64_t mem_size;
++
++    mib[0] = CTL_HW;
++    mib[1] = HW_MEMSIZE;
++
++    length = sizeof(mem_size);
++
++    if (sysctl(mib, 2, &mem_size, &length, NULL, 0) != -1) {
++        return mem_size;
++    } else {
++        std::cerr << "Error getting total memory size." << std::endl;
++        return -1;
++    }
++}
++
 +void llama_server_init(ext_server_params *sparams, ext_server_resp_t *err)
 +{
 +    assert(err != NULL && sparams != NULL);
 +    err->id = 0;
 +    err->msg[0] = '\0';
++
 +    try {
 +        llama = new llama_server_context;
 +        log_set_target(stdout);
@@ -117,6 +146,20 @@ index d0cd8e1..938b4eb 100644
 +        }
 +    
 +        llama_backend_init(params.numa);
++
++        // check memory requirements
++        // TODO - this is not the right place for this check it should be its own function, but it works for now
++        mem_required mem_req;
++        int64_t mem_ava;
++
++        mem_req = llama_get_mem_required(params.model.c_str(), true); // TODO: check if mmap is set
++        mem_ava = mem_available();
++        LOG_TEE("%s: bruce mem available  = %7.2f MiB\n", __func__, mem_ava / 1024.0 / 1024.0);
++        if (static_cast<int64_t>(mem_req.ctx_size + mem_req.mmapped_size) > mem_ava) {
++            err->id = -1;
++            snprintf(err->msg, err->msg_len, "not enough memory available for model %s, required %ld, available %lld", params.model.c_str(), mem_req.ctx_size + mem_req.mmapped_size, mem_ava);
++            return;
++        }
 +
 +        // load the model
 +        if (!llama->load_model(params))
@@ -344,7 +387,7 @@ index d0cd8e1..938b4eb 100644
 \ No newline at end of file
 diff --git a/examples/server/server.h b/examples/server/server.h
 new file mode 100644
-index 0000000..d22f1b6
+index 00000000..d22f1b6e
 --- /dev/null
 +++ b/examples/server/server.h
 @@ -0,0 +1,89 @@
@@ -439,7 +482,7 @@ index 0000000..d22f1b6
 +#endif // LLAMA_SERVER_LIBRARY
 \ No newline at end of file
 diff --git a/ggml-cuda.cu b/ggml-cuda.cu
-index 85f7a29..ce51364 100644
+index 85f7a293..ce51364a 100644
 --- a/ggml-cuda.cu
 +++ b/ggml-cuda.cu
 @@ -6410,6 +6410,7 @@ static cudaError_t ggml_cuda_cpy_tensor_2d(
@@ -450,6 +493,58 @@ index 85f7a29..ce51364 100644
          GGML_ASSERT(false);
      }
      char * dst_ptr = (char *) dst;
+diff --git a/llama.cpp b/llama.cpp
+index 54fa9e43..e7faca86 100644
+--- a/llama.cpp
++++ b/llama.cpp
+@@ -10172,3 +10172,28 @@ static void llama_log_callback_default(ggml_log_level level, const char * text,
+     fputs(text, stderr);
+     fflush(stderr);
+ }
++
++mem_required llama_get_mem_required(const char * path_model, bool use_mmap) {
++    llama_model* mem_model = new llama_model;
++    mem_required mem_req;
++    try {
++        llama_model_loader ml(path_model, use_mmap, nullptr);
++        
++        llm_load_arch(ml, *mem_model);
++        llm_load_hparams(ml, *mem_model);
++        llm_load_vocab(ml, *mem_model);
++
++        ml.calc_sizes(mem_req.ctx_size, mem_req.mmapped_size);
++
++        LLAMA_LOG_INFO("%s: bruce ctx size      = %7.2f MiB\n", __func__, mem_req.ctx_size / 1024.0 / 1024.0);
++
++        size_t mem_required = mem_req.ctx_size + mem_req.mmapped_size;
++        LLAMA_LOG_INFO("%s: bruce mem required  = %7.2f MiB\n", __func__, mem_required / 1024.0 / 1024.0);
++    } catch (const std::exception& err) {
++        LLAMA_LOG_ERROR("error loading model: %s\n", err.what());
++        delete mem_model;
++        throw; // Rethrow the exception to handle it in the calling code
++    }
++    delete mem_model;
++    return mem_req;
++}
+\ No newline at end of file
+diff --git a/llama.h b/llama.h
+index 45a65cac..d8d0fce5 100644
+--- a/llama.h
++++ b/llama.h
+@@ -849,6 +849,13 @@ extern "C" {
+ 
+     LLAMA_API void llama_dump_timing_info_yaml(FILE * stream, const struct llama_context * ctx);
+ 
++    struct mem_required {
++        size_t ctx_size;
++        size_t mmapped_size;
++    };
++
++    mem_required llama_get_mem_required(const char * path_model, bool use_mmap);
++
+ #ifdef __cplusplus
+ }
+ #endif
 -- 
 2.39.3 (Apple Git-145)
 
