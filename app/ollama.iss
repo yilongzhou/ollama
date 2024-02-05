@@ -6,7 +6,11 @@
 
 
 #define MyAppName "Ollama"
-#define MyAppVersion "0.2.0"
+#if GetEnv("PKG_VERSION") != ""
+  #define MyAppVersion GetEnv("PKG_VERSION")
+#else
+  #define MyAppVersion "0.0.0"
+#endif
 #define MyAppPublisher "Ollama, Inc."
 #define MyAppURL "https://ollama.ai/"
 #define MyAppExeName "ollama app.exe"
@@ -30,7 +34,7 @@ DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-OutputBaseFilename="Ollama Setup"
+OutputBaseFilename="OllamaSetup"
 SetupIconFile={#MyIcon}
 UninstallDisplayIcon={uninstallexe}
 Compression=lzma2

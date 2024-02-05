@@ -16,6 +16,21 @@ function checkEnv() {
 
     $script:DEPS_DIR="${script:SRC_DIR}\dist\windeps"
     $env:CGO_ENABLED="1"
+    echo "Checking version"
+    if (!$env:VERSION) {
+        $data=(git describe --tags --first-parent --abbrev=7 --long --dirty --always)
+        $pattern="v(.+)"
+        if ($data -match $pattern) {
+            $env:VERSION=$matches[1]
+        }
+    }
+    $pattern = "(\d+[.]\d+[.]\d+)-(\d+)-"
+    if ($env:VERSION -match $pattern) {
+        $env:PKG_VERSION=$matches[1] + "." + $matches[2]
+    } else {
+        $env:PKG_VERSION=$env:VERSION
+    }
+    write-host "Building Ollama $env:VERSION with package version $env:PKG_VERSION"
 }
 
 
@@ -23,14 +38,14 @@ function buildOllama() {
     write-host "Building ollama CLI"
     & go generate ./...
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-    & go build .
+    & go build "-ldflags=-w -s ""-X=github.com/jmorganca/ollama/version.Version=$env:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
 function buildApp() {
     write-host "Building Ollama App"
     cd "${script:SRC_DIR}\app"
-    & go build -ldflags="-H windowsgui" .
+    & go build "-ldflags=-H windowsgui -w -s ""-X=github.com/jmorganca/ollama/version.Version=$env:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
@@ -54,6 +69,7 @@ function gatherDependencies() {
 function buildInstaller() {
     write-host "Building Ollama Installer"
     cd "${script:SRC_DIR}\app"
+    # /dOllamaPkgVersion=$env:PKG_VERSION
     & "${script:INNO_SETUP_DIR}\ISCC.exe" .\ollama.iss
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
