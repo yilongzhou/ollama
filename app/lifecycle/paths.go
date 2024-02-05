@@ -17,7 +17,7 @@ var (
 	// TODO - should there be a distinct log dir?
 	UpdateStageDir = "/tmp"
 	ServerLogFile  = "/tmp/ollama.log"
-	Installer      = "Ollama Setup.exe"
+	Installer      = "OllamaSetup.exe"
 )
 
 func init() {
