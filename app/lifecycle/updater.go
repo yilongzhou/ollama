@@ -115,7 +115,7 @@ func DownloadNewRelease(ctx context.Context, updateResp UpdateResponse) error {
 	}
 	filename := Installer
 	_, params, err := mime.ParseMediaType(resp.Header.Get("content-disposition"))
-	if err != nil {
+	if err == nil {
 		filename = params["filename"]
 	}
 
@@ -228,16 +228,25 @@ func DoUpgrade() error {
 	}
 	installerExe := files[0]
 
-	slog.Debug(fmt.Sprintf("XXX attempting to start installer %s", installerExe))
+	slog.Info("starting upgrade with " + installerExe)
+	slog.Info("upgrade log file " + UpgradeLogFile)
 
 	installArgs := []string{
-		"/SP", // Skip the "This will install... Do you wish to continue" prompt
-		"/SILENT",
-		// "/VERYSILENT", // TODO - use this one once it's validated
-		"/SUPPRESSMSGBOXES",  // Might not be needed?
-		"/CLOSEAPPLICATIONS", // Quit the tray app if it's still running
+		"/CLOSEAPPLICATIONS",                    // Quit the tray app if it's still running
+		"/LOG=" + filepath.Base(UpgradeLogFile), // Only relative seems reliable, so set pwd
 		// "/FORCECLOSEAPPLICATIONS", // Force close the tray app - might be needed
 	}
+	// In debug mode, let the installer show to aid in troubleshooting if something goes wrong
+	if debug := os.Getenv("OLLAMA_DEBUG"); debug == "" {
+		installArgs = append(installArgs,
+			"/SP", // Skip the "This will install... Do you wish to continue" prompt
+			"/SUPPRESSMSGBOXES",
+			"/SILENT",
+			"/VERYSILENT",
+		)
+	}
+	slog.Debug(fmt.Sprintf("Upgrade: %s %v", installerExe, installArgs))
+	os.Chdir(filepath.Dir(UpgradeLogFile)) //nolint:errcheck
 	cmd := exec.Command(installerExe, installArgs...)
 
 	if err := cmd.Start(); err != nil {

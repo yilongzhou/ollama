@@ -21,16 +21,18 @@ function checkEnv() {
         $data=(git describe --tags --first-parent --abbrev=7 --long --dirty --always)
         $pattern="v(.+)"
         if ($data -match $pattern) {
-            $env:VERSION=$matches[1]
+            $script:VERSION=$matches[1]
         }
+    } else {
+        $script:VERSION=$env:VERSION
     }
     $pattern = "(\d+[.]\d+[.]\d+)-(\d+)-"
-    if ($env:VERSION -match $pattern) {
-        $env:PKG_VERSION=$matches[1] + "." + $matches[2]
+    if ($script:VERSION -match $pattern) {
+        $script:PKG_VERSION=$matches[1] + "." + $matches[2]
     } else {
-        $env:PKG_VERSION=$env:VERSION
+        $script:PKG_VERSION=$script:VERSION
     }
-    write-host "Building Ollama $env:VERSION with package version $env:PKG_VERSION"
+    write-host "Building Ollama $script:VERSION with package version $script:PKG_VERSION"
 }
 
 
@@ -38,14 +40,14 @@ function buildOllama() {
     write-host "Building ollama CLI"
     & go generate ./...
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
-    & go build "-ldflags=-w -s ""-X=github.com/jmorganca/ollama/version.Version=$env:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
+    & go build "-ldflags=-w -s ""-X=github.com/jmorganca/ollama/version.Version=$script:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
 function buildApp() {
     write-host "Building Ollama App"
     cd "${script:SRC_DIR}\app"
-    & go build "-ldflags=-H windowsgui -w -s ""-X=github.com/jmorganca/ollama/version.Version=$env:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
+    & go build "-ldflags=-H windowsgui -w -s ""-X=github.com/jmorganca/ollama/version.Version=$script:VERSION"" ""-X=github.com/jmorganca/ollama/server.mode=release""" .
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
 
@@ -69,7 +71,7 @@ function gatherDependencies() {
 function buildInstaller() {
     write-host "Building Ollama Installer"
     cd "${script:SRC_DIR}\app"
-    # /dOllamaPkgVersion=$env:PKG_VERSION
+    $env:PKG_VERSION=$script:PKG_VERSION
     & "${script:INNO_SETUP_DIR}\ISCC.exe" .\ollama.iss
     if ($LASTEXITCODE -ne 0) { exit($LASTEXITCODE)}
 }
@@ -85,4 +87,5 @@ try {
     write-host $_
 } finally {
     set-location $script:SRC_DIR
+    $env:PKG_VERSION=""
 }

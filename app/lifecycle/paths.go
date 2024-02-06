@@ -17,6 +17,7 @@ var (
 	// TODO - should there be a distinct log dir?
 	UpdateStageDir = "/tmp"
 	ServerLogFile  = "/tmp/ollama.log"
+	UpgradeLogFile = "/tmp/ollama_update.log"
 	Installer      = "OllamaSetup.exe"
 )
 
@@ -29,6 +30,7 @@ func init() {
 		AppDataDir = filepath.Join(localAppData, "Ollama")
 		UpdateStageDir = filepath.Join(AppDataDir, "updates")
 		ServerLogFile = filepath.Join(AppDataDir, "server.log")
+		UpgradeLogFile = filepath.Join(AppDataDir, "upgrade.log")
 
 		// Executables are stored in APPDATA
 		AppDir = filepath.Join(localAppData, "Programs", "Ollama")
