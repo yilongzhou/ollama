@@ -56,8 +56,8 @@ function apply_patches {
         }
 
         # Checkout each file
+        Set-Location -Path ${script:llamacppDir}
         foreach ($file in $filePaths) {
-            Set-Location -Path ${script:llamacppDir}
             git checkout $file
         }
     }
@@ -109,8 +109,23 @@ function compress_libs {
 }
 
 function cleanup {
+    $patches = Get-ChildItem "../patches/*.diff"
+    foreach ($patch in $patches) {
+        # Extract file paths from the patch file
+        $filePaths = Get-Content $patch.FullName | Where-Object { $_ -match '^\+\+\+ ' } | ForEach-Object {
+            $parts = $_ -split ' '
+            ($parts[1] -split '/', 2)[1]
+        }
+
+        # Checkout each file
+        Set-Location -Path ${script:llamacppDir}
+        foreach ($file in $filePaths) {            
+            git checkout $file
+        }
+    }
     Set-Location "${script:llamacppDir}/examples/server"
     git checkout CMakeLists.txt server.cpp
+
 }
 
 init_vars
