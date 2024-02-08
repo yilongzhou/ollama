@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -937,8 +938,61 @@ func (s *Server) GenerateRoutes() http.Handler {
 		)
 	}
 
-	r := gin.Default()
+	r := gin.New()
 	r.Use(
+		gin.Recovery(),
+		func(c *gin.Context) {
+			start := time.Now()
+
+			c.Next()
+
+			logger := slog.Default().With(
+				slog.String("duration", fmt.Sprintf("%fs", time.Since(start).Seconds())),
+				slog.Group(
+					"http",
+					slog.String("method", c.Request.Method),
+					slog.Group(
+						"url",
+						slog.String("path", c.Request.URL.Path),
+						slog.String("query", c.Request.URL.RawQuery),
+					),
+					slog.Int("status_code", c.Writer.Status()),
+					slog.String("user_agent", c.Request.UserAgent()),
+				),
+				slog.Group(
+					"network",
+					slog.Int("bytes_written", c.Writer.Size()),
+					slog.Int64("bytes_read", c.Request.ContentLength),
+					slog.Group(
+						"remote",
+						slog.String("ip", c.ClientIP()),
+					),
+					slog.Group(
+						"server",
+						slog.String("ip", c.Request.Host),
+					),
+				),
+			)
+
+			message := "request completed"
+			if len(c.Errors) > 0 {
+				errs := make([]any, len(c.Errors))
+				for i, err := range c.Errors {
+					errs[i] = slog.String(strconv.Itoa(i), err.Error())
+				}
+
+				logger = logger.With(slog.Group("errors", errs...))
+			}
+
+			switch {
+			case c.Writer.Status() >= http.StatusInternalServerError:
+				logger.Log(c.Request.Context(), slog.LevelError, message)
+			case c.Writer.Status() >= http.StatusBadRequest:
+				logger.Log(c.Request.Context(), slog.LevelWarn, message)
+			default:
+				logger.Log(c.Request.Context(), slog.LevelInfo, message)
+			}
+		},
 		cors.New(config),
 		func(c *gin.Context) {
 			c.Set("workDir", s.WorkDir)
