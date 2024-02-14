@@ -1005,6 +1005,13 @@ func Serve(ln net.Listener) error {
 		}
 	}
 
+	// migrate registry.ollama.ai to ollama.com
+	if err := migrateRegistryDomain(); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+
 	s, err := NewServer()
 	if err != nil {
 		return err
