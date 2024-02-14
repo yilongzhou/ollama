@@ -802,7 +802,7 @@ func ListModelsHandler(c *gin.Context) {
 			path, tag := filepath.Split(path)
 			model := strings.Trim(strings.TrimPrefix(path, manifestsPath), string(os.PathSeparator))
 			modelPath := strings.Join([]string{model, tag}, ":")
-			canonicalModelPath := strings.ReplaceAll(modelPath, string(os.PathSeparator), "/")
+			canonicalModelPath := filepath.ToSlash(modelPath)
 
 			resp, err := modelResponse(canonicalModelPath)
 			if err != nil {
