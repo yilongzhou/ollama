@@ -17,12 +17,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/containerd/console"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
@@ -890,11 +887,6 @@ func versionHandler(cmd *cobra.Command, _ []string) {
 func NewCLI() *cobra.Command {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	cobra.EnableCommandSorting = false
-
-	if runtime.GOOS == "windows" {
-		// Enable colorful ANSI escape code in Windows terminal (disabled by default)
-		console.ConsoleFromFile(os.Stdout) //nolint:errcheck
-	}
 
 	rootCmd := &cobra.Command{
 		Use:           "ollama",
