@@ -455,6 +455,72 @@ func EmbeddingHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func EncodingHandler(c *gin.Context) {
+	loaded.mu.Lock()
+	defer loaded.mu.Unlock()
+
+	var req api.EmbeddingRequest
+	err := c.ShouldBindJSON(&req)
+	switch {
+	case errors.Is(err, io.EOF):
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
+		return
+	case err != nil:
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Model == "" {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "model is required"})
+		return
+	}
+
+	model, err := GetModel(req.Model)
+	if err != nil {
+		var pErr *fs.PathError
+		if errors.As(err, &pErr) {
+			c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("model '%s' not found, try pulling it first", req.Model)})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	opts, err := modelOptions(model, req.Options)
+	if err != nil {
+		if errors.Is(err, api.ErrInvalidOpts) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var sessionDuration time.Duration
+	if req.KeepAlive == nil {
+		sessionDuration = defaultSessionDuration
+	} else {
+		sessionDuration = req.KeepAlive.Duration
+	}
+
+	if err := load(c, model, opts, sessionDuration); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	encoded, err := loaded.runner.Encode(c.Request.Context(), req.Prompt)
+	if err != nil {
+		slog.Info(fmt.Sprintf("encoding failed: %v", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encode"})
+		return
+	}
+
+	resp := api.EncodeResponse{
+		Encoded: encoded,
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func PullModelHandler(c *gin.Context) {
 	var req api.PullRequest
 	err := c.ShouldBindJSON(&req)
@@ -948,6 +1014,7 @@ func (s *Server) GenerateRoutes() http.Handler {
 	r.POST("/api/generate", GenerateHandler)
 	r.POST("/api/chat", ChatHandler)
 	r.POST("/api/embeddings", EmbeddingHandler)
+	r.POST("/api/encode", EncodingHandler)
 	r.POST("/api/create", CreateModelHandler)
 	r.POST("/api/push", PushModelHandler)
 	r.POST("/api/copy", CopyModelHandler)
