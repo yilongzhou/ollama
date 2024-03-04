@@ -122,7 +122,7 @@ jobs:
           touch llm/llama.cpp/ggml-metal.metal
         if: ${{ startsWith(matrix.os, 'macos-') }}
       - run: |
-          mkdir -p llm/llama.cpp/build/windows/${{ matrix.arch }}/stub/bin
+          mkdir -p llm/llama.cpp/build/windows/${{ matrix.arch }}/stub/bin/Release
           touch llm/llama.cpp/build/windows/${{ matrix.arch }}/stub/bin/Release/server
           touch llm/llama.cpp/build/windows/${{ matrix.arch }}/stub/bin/Release/llama.dll
         if: ${{ startsWith(matrix.os, 'windows-') }}
