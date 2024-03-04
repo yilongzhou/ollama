@@ -153,7 +153,7 @@ jobs:
       - run: go get
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-libraries
+          name: ${{ matrix.os }}-${{ matrix.arch }}-build
           path: llm/build
       - run: go build
       - run: go test -v ./...
