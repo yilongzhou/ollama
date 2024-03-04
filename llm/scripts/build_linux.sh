@@ -49,7 +49,7 @@ if [ -z "${CUDACXX}" ]; then
     fi
 fi
 COMMON_CMAKE_DEFS="-DCMAKE_POSITION_INDEPENDENT_CODE=on -DLLAMA_SERVER_VERBOSE=on -DLLAMA_NATIVE=off -DLLAMA_AVX=on -DLLAMA_AVX2=off -DLLAMA_AVX512=off -DLLAMA_FMA=off -DLLAMA_F16C=off"
-source $(dirname $0)/gen_common.sh
+source $(dirname $0)/build_common.sh
 init_vars
 git_module_setup
 apply_patches
@@ -139,7 +139,7 @@ if [ -d "${CUDA_LIB_DIR}" ]; then
     if [ -n "${CUDA_MAJOR}" ]; then
         CUDA_VARIANT=_v${CUDA_MAJOR}
     fi
-    CMAKE_DEFS="-DLLAMA_CUBLAS=on -DLLAMA_CUDA_FORCE_MMQ=on -DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES} ${COMMON_CMAKE_DEFS} ${CMAKE_DEFS}"
+    CMAKE_DEFS="-DCUDAToolkit_ROOT=/usr/local/cuda -DLLAMA_CUBLAS=on -DLLAMA_CUDA_FORCE_MMQ=on -DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES} ${COMMON_CMAKE_DEFS} ${CMAKE_DEFS}"
     BUILD_DIR="build/linux/${ARCH}/cuda${CUDA_VARIANT}"
     EXTRA_LIBS="-L${CUDA_LIB_DIR} -lcudart -lcublas -lcublasLt -lcuda"
     build
@@ -148,17 +148,17 @@ if [ -d "${CUDA_LIB_DIR}" ]; then
     #
     # TODO - in the future we may shift to packaging these separately and conditionally
     #        downloading them in the install script.
-    DEPS="$(ldd ${BUILD_DIR}/lib/libext_server.so )"
+    DEPS="$(ldd ${BUILD_DIR}/bin/server )"
     for lib in libcudart.so libcublas.so libcublasLt.so ; do
         DEP=$(echo "${DEPS}" | grep ${lib} | cut -f1 -d' ' | xargs || true)
         if [ -n "${DEP}" -a -e "${CUDA_LIB_DIR}/${DEP}" ]; then
-            cp "${CUDA_LIB_DIR}/${DEP}" "${BUILD_DIR}/lib/"
+            cp "${CUDA_LIB_DIR}/${DEP}" "${BUILD_DIR}/bin/"
         elif [ -e "${CUDA_LIB_DIR}/${lib}.${CUDA_MAJOR}" ]; then
-            cp "${CUDA_LIB_DIR}/${lib}.${CUDA_MAJOR}" "${BUILD_DIR}/lib/"
+            cp "${CUDA_LIB_DIR}/${lib}.${CUDA_MAJOR}" "${BUILD_DIR}/bin/"
         elif [ -e "${CUDART_LIB_DIR}/${lib}" ]; then
-            cp -d ${CUDART_LIB_DIR}/${lib}* "${BUILD_DIR}/lib/"
+            cp -d ${CUDART_LIB_DIR}/${lib}* "${BUILD_DIR}/bin/"
         else
-            cp -d "${CUDA_LIB_DIR}/${lib}*" "${BUILD_DIR}/lib/"
+            cp -d "${CUDA_LIB_DIR}/${lib}*" "${BUILD_DIR}/bin/"
         fi
     done
     compress
