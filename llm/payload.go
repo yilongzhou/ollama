@@ -18,7 +18,7 @@ import (
 	"github.com/jmorganca/ollama/gpu"
 )
 
-var payloadMissing = fmt.Errorf("expected payloads not included in this build of ollama")
+var errPayloadMissing = fmt.Errorf("expected payloads not included in this build of ollama")
 
 // TODO: error check this or initialize it in init()
 // TODO: this should be a determinate location to avoid required files disappearing
@@ -36,8 +36,15 @@ func Init() error {
 		os.Setenv("GGML_METAL_PATH_RESOURCES", workDir)
 	}
 
+	var binglob string
+	if runtime.GOOS == "windows" {
+		binglob = "build/windows/*/*/bin/*/*"
+	} else {
+		binglob = "build/*/*/*/bin/*"
+	}
+
 	// extract server libraries
-	err := extractFiles(workDir, "build/*/*/*/bin/server.gz")
+	err := extractFiles(workDir, binglob)
 	if err != nil {
 		return fmt.Errorf("extract binaries: %v", err)
 	}
@@ -54,18 +61,21 @@ func Init() error {
 // Any library without a variant is the lowest common denominator
 func available() map[string]string {
 	// glob workDir for files that start with ollama_
-	pattern := filepath.Join(workDir, "ollama_*")
+	pattern := filepath.Join(workDir, "*")
 
 	files, err := filepath.Glob(pattern)
 	if err != nil {
+		slog.Debug("could not glob", "pattern", pattern, "error", err)
 		return nil
 	}
+
+	slog.Debug("available", "files", files)
 
 	servers := make(map[string]string)
 
 	for _, file := range files {
-		slog.Debug("available: found server", "file", file)
-		servers[strings.TrimPrefix(filepath.Base(file), "ollama_")] = file
+		slog.Debug("available: found", "file", file)
+		servers[filepath.Base(file)] = file
 	}
 
 	return servers
@@ -110,10 +120,7 @@ func serversForGpu(info gpu.GpuInfo) []string {
 		}
 
 		slices.Sort(alt)
-
-		for _, a := range alt {
-			servers = append(servers, a)
-		}
+		servers = append(servers, alt...)
 	}
 
 	// Load up the best CPU variant if not primary requested
@@ -151,7 +158,7 @@ func Cleanup() error {
 func extractFiles(targetDir string, glob string) error {
 	files, err := fs.Glob(libEmbed, glob)
 	if err != nil || len(files) == 0 {
-		return payloadMissing
+		return errPayloadMissing
 	}
 
 	// Read all file entries in the root of the embedded filesystem
@@ -169,7 +176,15 @@ func extractFiles(targetDir string, glob string) error {
 	// build/$OS/$GOARCH/$VARIANT/{bin,lib}/$FILE
 	for _, file := range files {
 		filename := file
-		variant := filepath.Base(filepath.Dir(filepath.Dir(filename)))
+		var variant string
+
+		if runtime.GOOS == "windows" {
+			variant = filepath.Base(filepath.Dir(filepath.Dir(filepath.Dir(filename))))
+		} else {
+			variant = filepath.Base(filepath.Dir(filepath.Dir(filename)))
+		}
+
+		slog.Debug("extracting", "file", filename, "variant", variant)
 
 		g.Go(func() error {
 			srcf, err := libEmbed.Open(filename)
@@ -187,12 +202,15 @@ func extractFiles(targetDir string, glob string) error {
 				filename = strings.TrimSuffix(filename, ".gz")
 			}
 
+			variantDir := filepath.Join(targetDir, variant)
+			if err := os.MkdirAll(variantDir, 0o755); err != nil {
+				return fmt.Errorf("extractFiles could not mkdir %s: %v", workDir, err)
+			}
+
 			// rename "server" to a more descriptive binary name
 			base := filepath.Base(filename)
-			destFilename := filepath.Join(targetDir, base)
-			if filepath.Base(filename) == "server" {
-				destFilename = filepath.Join(targetDir, "ollama_"+variant)
-			}
+			destFilename := filepath.Join(variantDir, base)
+			destFilename = strings.Replace(destFilename, "server", "ollama_llama_server", 1)
 
 			slog.Info("extracting", "file", destFilename)
 

@@ -137,24 +137,16 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 
 	available := available()
 	servers := serversForGpu(info)
-	slog.Info("got servers for machine", "servers", servers)
-
-	if len(servers) == 0 {
-		err = Init()
-		if err != nil {
-			return nil, err
-		}
-		servers = serversForGpu(info)
-	}
+	slog.Info("got servers for machine", "servers", servers, "available", available)
 
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no servers found for %v", info)
 	}
 
-	server := available[servers[0]]
+	dir := available[servers[0]]
 
 	// TODO: let user override with OLLAMA_LLM_LIBRARY
-	slog.Info("using runner", "runner", server)
+	slog.Info("using server", "server", dir)
 
 	params := []string{
 		"--model", model,
@@ -220,12 +212,17 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 
 	slog.Info("starting llama server", "params", params)
 
-	// append the runner directory to LD_LIBRARY_PATH
+	// append the server directory to LD_LIBRARY_PATH
 	var libraryPaths []string
 	if libraryPath, ok := os.LookupEnv("LD_LIBRARY_PATH"); ok {
 		libraryPaths = append(libraryPaths, libraryPath)
 	}
-	libraryPaths = append(libraryPaths, filepath.Dir(server))
+	libraryPaths = append(libraryPaths, dir)
+
+	server := filepath.Join(dir, "ollama_llama_server")
+	if runtime.GOOS == "windows" {
+		server = server + ".exe"
+	}
 
 	s := &LlamaServer{
 		port: port,
@@ -239,7 +236,7 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 	slog.Info("starting llama", "cmd", s.cmd.String())
 
 	if err := s.cmd.Start(); err != nil {
-		return nil, fmt.Errorf("error starting the external llama runner: %v", err)
+		return nil, fmt.Errorf("error starting the external llama server: %v", err)
 	}
 
 	go func() {
@@ -247,7 +244,7 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 	}()
 
 	if err := s.waitUntilRunning(); err != nil {
-		log.Printf("error starting llama runner: %v", err)
+		log.Printf("error starting llama server: %v", err)
 		s.Close()
 
 		return nil, err

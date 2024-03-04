@@ -3,6 +3,7 @@ package llm
 // #cgo CFLAGS: -Illama.cpp
 // #cgo darwin,arm64 LDFLAGS: -lstdc++ -L${SRCDIR}/build/darwin/arm64/metal -lllama -framework Accelerate -framework Foundation -framework Metal -framework MetalKit -framework MetalPerformanceShaders
 // #cgo darwin,amd64 LDFLAGS: -lstdc++ -L${SRCDIR}/build/darwin/x86_64/cpu -lllama
+// #cgo windows,amd64 LDFLAGS: -lstdc++ -L${SRCDIR}/build/windows/amd64/cpu/bin/Release -lllama
 // #include "llama.h"
 import "C"
 
