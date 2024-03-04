@@ -1,4 +1,4 @@
-//go:generate powershell -ExecutionPolicy Bypass -File ./scripts/build_windows.ps1
+//go:generate powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
 package llm
 
 import "embed"
