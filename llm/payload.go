@@ -33,7 +33,8 @@ func Init() error {
 		if err != nil {
 			return fmt.Errorf("extract .metal shader: %v", err)
 		}
-		os.Setenv("GGML_METAL_PATH_RESOURCES", workDir)
+
+		os.Setenv("GGML_METAL_PATH_RESOURCES", filepath.Join(workDir, "metal"))
 	}
 
 	var binglob string
