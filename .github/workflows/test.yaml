@@ -30,19 +30,19 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.arch }}-bin
           path: llm/build/**/bin/*
 
-      # Additional step to upload libllama.a for Linux and macOS
+      # upload libllama.a for Linux and macOS
       - uses: actions/upload-artifact@v4
         if: matrix.os != 'windows-latest'
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-lib
           path: llm/build/*/*/cpu/libllama.a
 
-      # Additional step to upload llama.dll for Windows
+      # upload llama.dll for Windows
       - uses: actions/upload-artifact@v4
         if: matrix.os == 'windows-latest'
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-lib
-          path: llm/build/*/*/cpu/bin/*/llama.dll
+          path: llama.dll
   generate-cuda:
     strategy:
       matrix:
