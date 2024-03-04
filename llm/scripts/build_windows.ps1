@@ -179,7 +179,7 @@ md "${script:buildDir}/lib" -ea 0 > $null
 echo $null >> "${script:buildDir}/lib/.generated"
 
 write-host "copying llama.dll"
-Copy-Item -Path "build/windows/${script:ARCH}/cpu/bin/${script:config}/llama.dll" -Destination .
+Copy-Item -Path "build/windows/${script:ARCH}/cpu/bin/${script:config}/llama.dll" -Destination ..
 
 cleanup
 write-host "`ngo generate completed"
