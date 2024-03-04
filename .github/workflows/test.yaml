@@ -27,10 +27,22 @@ jobs:
       - run: go generate -x ./...
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-build
-          path: |
-            llm/build/**/bin/*
-            llm/build/*/*/cpu/libllama.a
+          name: ${{ matrix.os }}-${{ matrix.arch }}-bin
+          path: llm/build/**/bin/*
+
+      # Additional step to upload libllama.a for Linux and macOS
+      - uses: actions/upload-artifact@v4
+        if: matrix.os != 'windows-latest'
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}-lib
+          path: llm/build/*/*/cpu/libllama.a
+
+      # Additional step to upload llama.dll for Windows
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'windows-latest'
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}-lib
+          path: llm/build/*/*/cpu/bin/Release/llama.dll
   generate-cuda:
     strategy:
       matrix:
@@ -156,7 +168,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-build
-          path: llm/build
+          path: llm
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}-build
+          path: llm
       - run: go build
       - run: go test -v ./...
       - uses: actions/upload-artifact@v4
