@@ -627,10 +627,12 @@ func (s *LlamaServer) Detokenize(ctx context.Context, tokens []int) (string, err
 	return decoded.Content, nil
 }
 
-func (s *LlamaServer) Close() {
+func (s *LlamaServer) Close() error {
 	if s.cmd != nil {
-		s.cmd.Process.Kill()
+		return s.cmd.Process.Kill()
 	}
+
+	return nil
 }
 
 func parseDurationMs(ms float64) time.Duration {

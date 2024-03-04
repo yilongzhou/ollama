@@ -1006,7 +1006,9 @@ func Serve(ln net.Listener) error {
 		if loaded.llama != nil {
 			loaded.llama.Close()
 		}
-		llm.Cleanup()
+		if err := llm.Cleanup(); err != nil {
+			slog.Info(fmt.Sprintf("llama cleanup failed with %s", err))
+		}
 		os.Exit(0)
 	}()
 
