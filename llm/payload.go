@@ -25,7 +25,7 @@ var errPayloadMissing = fmt.Errorf("expected payloads not included in this build
 var workDir, _ = os.MkdirTemp("", "ollama")
 
 func Init() error {
-	slog.Info("extracting embedded files", "workdir", workDir)
+	slog.Info("extracting embedded files", "dir", workDir)
 
 	// also extract the .metal shader on darwin/arm64
 	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
@@ -37,15 +37,15 @@ func Init() error {
 		os.Setenv("GGML_METAL_PATH_RESOURCES", filepath.Join(workDir, "metal"))
 	}
 
-	var binglob string
+	var binGlob string
 	if runtime.GOOS == "windows" {
-		binglob = "build/windows/*/*/bin/*/*"
+		binGlob = "build/windows/*/*/bin/*/*"
 	} else {
-		binglob = "build/*/*/*/bin/*"
+		binGlob = "build/*/*/*/bin/*"
 	}
 
 	// extract server libraries
-	err := extractFiles(workDir, binglob)
+	err := extractFiles(workDir, binGlob)
 	if err != nil {
 		return fmt.Errorf("extract binaries: %v", err)
 	}
@@ -53,6 +53,12 @@ func Init() error {
 	// TODO: print available variants
 	// slog.Info(fmt.Sprintf("Dynamic LLM libraries %v", variants))
 	// slog.Debug("Override detection logic by setting OLLAMA_LLM_LIBRARY")
+	var variants []string
+	for v := range available() {
+		variants = append(variants, v)
+	}
+	slog.Info(fmt.Sprintf("Dynamic LLM libraries %v", variants))
+	slog.Debug("Override detection logic by setting OLLAMA_LLM_LIBRARY")
 
 	return nil
 }
@@ -70,10 +76,7 @@ func available() map[string]string {
 		return nil
 	}
 
-	slog.Debug("available", "files", files)
-
 	servers := make(map[string]string)
-
 	for _, file := range files {
 		slog.Debug("available: found", "file", file)
 		servers[filepath.Base(file)] = file
@@ -88,8 +91,6 @@ func available() map[string]string {
 func serversForGpu(info gpu.GpuInfo) []string {
 	// glob workDir for files that start with ollama_
 	available := available()
-	slog.Info("available", "servers", available)
-
 	requested := info.Library
 	if info.Variant != "" {
 		requested += "_" + info.Variant
@@ -162,12 +163,6 @@ func extractFiles(targetDir string, glob string) error {
 		return errPayloadMissing
 	}
 
-	// Read all file entries in the root of the embedded filesystem
-	slog.Info("files to extract:", "files", files)
-	if err != nil {
-		return err
-	}
-
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("extractFiles could not mkdir %s: %v", workDir, err)
 	}
@@ -185,7 +180,7 @@ func extractFiles(targetDir string, glob string) error {
 			variant = filepath.Base(filepath.Dir(filepath.Dir(filename)))
 		}
 
-		slog.Debug("extracting", "file", filename, "variant", variant)
+		slog.Debug("extracting", "variant", variant, "file", filename)
 
 		g.Go(func() error {
 			srcf, err := libEmbed.Open(filename)
@@ -212,8 +207,6 @@ func extractFiles(targetDir string, glob string) error {
 			base := filepath.Base(filename)
 			destFilename := filepath.Join(variantDir, base)
 			destFilename = strings.Replace(destFilename, "server", "ollama_llama_server", 1)
-
-			slog.Info("extracting", "file", destFilename)
 
 			_, err = os.Stat(destFilename)
 			switch {

@@ -137,7 +137,6 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 
 	available := available()
 	servers := serversForGpu(info)
-	slog.Info("got servers for machine", "servers", servers, "available", available)
 
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no servers found for %v", info)
@@ -146,7 +145,7 @@ func NewLlamaServer(model string, adapters, projectors []string, opts api.Option
 	dir := available[servers[0]]
 
 	// TODO: let user override with OLLAMA_LLM_LIBRARY
-	slog.Info("using server", "server", dir)
+	slog.Info("using server", "server", servers[0])
 
 	params := []string{
 		"--model", model,

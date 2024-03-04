@@ -53,10 +53,11 @@ var loaded struct {
 
 	llama *llm.LlamaServer
 
-	expireAt    time.Time
 	expireTimer *time.Timer
 
-	*Model
+	model      string
+	adapters   []string
+	projectors []string
 	*api.Options
 }
 
@@ -65,8 +66,9 @@ var defaultSessionDuration = 5 * time.Minute
 // load a model into memory if it is not already loaded, it is up to the caller to lock loaded.mu before calling this function
 func load(model *Model, opts api.Options, sessionDuration time.Duration) error {
 	needLoad := loaded.llama == nil || // is there a model loaded?
-		loaded.ModelPath != model.ModelPath || // has the base model changed?
-		!reflect.DeepEqual(loaded.AdapterPaths, model.AdapterPaths) || // have the adapters changed?
+		loaded.model != model.ModelPath || // has the base model changed?
+		!reflect.DeepEqual(loaded.adapters, model.AdapterPaths) || // have the adapters changed?
+		!reflect.DeepEqual(loaded.projectors, model.ProjectorPaths) || // have the adapters changed?
 		!reflect.DeepEqual(loaded.Options.Runner, opts.Runner) // have the runner options changed?
 
 	if needLoad {
@@ -74,11 +76,13 @@ func load(model *Model, opts api.Options, sessionDuration time.Duration) error {
 			slog.Info("changing loaded model")
 			loaded.llama.Close()
 			loaded.llama = nil
-			loaded.Model = nil
+			loaded.model = ""
+			loaded.adapters = nil
+			loaded.projectors = nil
 			loaded.Options = nil
 		}
 
-		llmRunner, err := llm.NewLlamaServer(model.ModelPath, model.AdapterPaths, model.ProjectorPaths, opts)
+		llama, err := llm.NewLlamaServer(model.ModelPath, model.AdapterPaths, model.ProjectorPaths, opts)
 		if err != nil {
 			// some older models are not compatible with newer versions of llama.cpp
 			// show a generalized compatibility error until there is a better way to
@@ -90,28 +94,26 @@ func load(model *Model, opts api.Options, sessionDuration time.Duration) error {
 			return err
 		}
 
-		loaded.Model = model
-		loaded.llama = llmRunner
+		loaded.model = model.ModelPath
+		loaded.adapters = model.AdapterPaths
+		loaded.projectors = model.ProjectorPaths
+		loaded.llama = llama
 		loaded.Options = &opts
 	}
-
-	loaded.expireAt = time.Now().Add(sessionDuration)
 
 	if loaded.expireTimer == nil {
 		loaded.expireTimer = time.AfterFunc(sessionDuration, func() {
 			loaded.mu.Lock()
 			defer loaded.mu.Unlock()
 
-			if time.Now().Before(loaded.expireAt) {
-				return
-			}
-
 			if loaded.llama != nil {
 				loaded.llama.Close()
 			}
 
 			loaded.llama = nil
-			loaded.Model = nil
+			loaded.model = ""
+			loaded.adapters = nil
+			loaded.projectors = nil
 			loaded.Options = nil
 		})
 	}
@@ -283,7 +285,6 @@ func GenerateHandler(c *gin.Context) {
 
 		fn := func(r llm.CompletionResponse) {
 			// Update model expiration
-			loaded.expireAt = time.Now().Add(sessionDuration)
 			loaded.expireTimer.Reset(sessionDuration)
 
 			// Build up the full response
@@ -1207,7 +1208,6 @@ func ChatHandler(c *gin.Context) {
 
 		fn := func(r llm.CompletionResponse) {
 			// Update model expiration
-			loaded.expireAt = time.Now().Add(sessionDuration)
 			loaded.expireTimer.Reset(sessionDuration)
 
 			resp := api.ChatResponse{
