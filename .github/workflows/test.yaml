@@ -27,8 +27,8 @@ jobs:
       - run: go generate -x ./...
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-libraries
-          path: llm/llama.cpp/build/**/lib/*
+          name: ${{ matrix.os }}-${{ matrix.arch }}-build
+          path: llm/build/**/bin/*
   generate-cuda:
     strategy:
       matrix:
@@ -56,8 +56,8 @@ jobs:
           OLLAMA_SKIP_CPU_GENERATE: '1'
       - uses: actions/upload-artifact@v4
         with:
-          name: cuda-${{ matrix.cuda-version }}-libraries
-          path: llm/llama.cpp/build/**/lib/*
+          name: cuda-${{ matrix.cuda-version }}-build
+          path: llm/build/**/bin/*
   generate-rocm:
     strategy:
       matrix:
@@ -86,8 +86,8 @@ jobs:
           OLLAMA_SKIP_CPU_GENERATE: '1'
       - uses: actions/upload-artifact@v4
         with:
-          name: rocm-${{ matrix.rocm-version }}-libraries
-          path: llm/llama.cpp/build/**/lib/*
+          name: rocm-${{ matrix.rocm-version }}-build
+          path: llm/build/**/bin/*
   lint:
     strategy:
       matrix:
@@ -154,7 +154,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-libraries
-          path: llm/llama.cpp/build
+          path: llm/build
       - run: go build
       - run: go test -v ./...
       - uses: actions/upload-artifact@v4
