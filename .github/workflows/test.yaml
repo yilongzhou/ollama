@@ -42,7 +42,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         with:
           name: ${{ matrix.os }}-${{ matrix.arch }}-lib
-          path: llm/build/*/*/cpu/bin/Release/llama.dll
+          path: llm/build/*/*/cpu/bin/*/llama.dll
   generate-cuda:
     strategy:
       matrix:
