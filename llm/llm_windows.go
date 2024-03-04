@@ -3,5 +3,5 @@ package llm
 
 import "embed"
 
-//go:embed build/windows/amd64/*/bin/Release/*
+//go:embed build/windows/amd64/*/bin/*/*
 var libEmbed embed.FS
