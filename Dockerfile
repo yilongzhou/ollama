@@ -88,11 +88,11 @@ FROM --platform=linux/amd64 cpu-build-amd64 AS build-amd64
 ENV CGO_ENABLED 1
 WORKDIR /go/src/github.com/jmorganca/ollama
 COPY . .
-COPY --from=cpu_avx-build-amd64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
-COPY --from=cpu_avx2-build-amd64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
-COPY --from=cuda-build-amd64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
-COPY --from=rocm-5-build-amd64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
-COPY --from=rocm-6-build-amd64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
+COPY --from=cpu_avx-build-amd64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
+COPY --from=cpu_avx2-build-amd64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
+COPY --from=cuda-build-amd64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
+COPY --from=rocm-5-build-amd64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
+COPY --from=rocm-6-build-amd64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
 ARG GOFLAGS
 ARG CGO_CFLAGS
 RUN go build .
@@ -103,7 +103,7 @@ ENV CGO_ENABLED 1
 ARG GOLANG_VERSION
 WORKDIR /go/src/github.com/jmorganca/ollama
 COPY . .
-COPY --from=cuda-build-arm64 /go/src/github.com/jmorganca/ollama/llm/llama.cpp/build/linux/ llm/llama.cpp/build/linux/
+COPY --from=cuda-build-arm64 /go/src/github.com/jmorganca/ollama/llm/build/linux/ llm/build/linux/
 ARG GOFLAGS
 ARG CGO_CFLAGS
 RUN go build .
