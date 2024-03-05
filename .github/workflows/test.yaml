@@ -4,46 +4,24 @@ on:
   pull_request:
 
 jobs:
-  generate:
+  cpu:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [amd64, arm64]
-        exclude:
-          - os: ubuntu-latest
-            arch: arm64
-          - os: windows-latest
-            arch: arm64
     runs-on: ${{ matrix.os }}
     env:
-      GOARCH: ${{ matrix.arch }}
+      CGO_ENABLED: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
-          cache: true
       - run: go get ./...
       - run: go generate -x ./...
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-bin
-          path: llm/build/**/bin/*
+      - run: go test -v ./...
+      - uses: golangci/golangci-lint-action@v3
 
-      # upload libllama.a for Linux and macOS
-      - uses: actions/upload-artifact@v4
-        if: matrix.os != 'windows-latest'
-        with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-lib
-          path: llm/build/*/*/cpu/libllama.a
-
-      # upload llama.dll for Windows
-      - uses: actions/upload-artifact@v4
-        if: matrix.os == 'windows-latest'
-        with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-lib
-          path: llama.dll
-  generate-cuda:
+  cuda:
     strategy:
       matrix:
         cuda-version:
@@ -61,18 +39,16 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          cache: true
       - run: go get ./...
       - run: |
           git config --global --add safe.directory /__w/ollama/ollama
           go generate -x ./...
         env:
           OLLAMA_SKIP_CPU_GENERATE: '1'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cuda-${{ matrix.cuda-version }}-build
-          path: llm/build/**/bin/*
-  generate-rocm:
+      - run: go test -v ./...
+      - uses: golangci/golangci-lint-action@v3
+
+  rocm:
     strategy:
       matrix:
         rocm-version:
@@ -91,91 +67,11 @@ jobs:
       - uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          cache: true
       - run: go get ./...
       - run: |
           git config --global --add safe.directory /__w/ollama/ollama
           go generate -x ./...
         env:
           OLLAMA_SKIP_CPU_GENERATE: '1'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rocm-${{ matrix.rocm-version }}-build
-          path: llm/build/**/bin/*
-  lint:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [amd64, arm64]
-        exclude:
-          - os: ubuntu-latest
-            arch: arm64
-          - os: windows-latest
-            arch: arm64
-          - os: macos-latest
-            arch: amd64
-    runs-on: ${{ matrix.os }}
-    env:
-      GOARCH: ${{ matrix.arch }}
-      CGO_ENABLED: '1'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache: false
-      - run: |
-          mkdir -p llm/build/linux/${{ matrix.arch }}/stub/bin
-          touch llm/build/linux/${{ matrix.arch }}/stub/bin/server
-        if: ${{ startsWith(matrix.os, 'ubuntu-') }}
-      - run: |
-          mkdir -p llm/build/darwin/${{ matrix.arch }}/stub/bin
-          touch llm/build/darwin/${{ matrix.arch }}/stub/bin/server
-          touch llm/build/darwin/${{ matrix.arch }}/stub/bin/ggml-metal.metal
-        if: ${{ startsWith(matrix.os, 'macos-') }}
-      - run: |
-          mkdir -p llm/build/windows/${{ matrix.arch }}/stub/bin/Release
-          touch llm/build/windows/${{ matrix.arch }}/stub/bin/Release/server
-          touch llm/build/windows/${{ matrix.arch }}/stub/bin/Release/llama.dll
-        if: ${{ startsWith(matrix.os, 'windows-') }}
-      - uses: golangci/golangci-lint-action@v3
-  test:
-    needs: generate
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [amd64]
-        exclude:
-          - os: ubuntu-latest
-            arch: arm64
-          - os: windows-latest
-            arch: arm64
-    runs-on: ${{ matrix.os }}
-    env:
-      GOARCH: ${{ matrix.arch }}
-      CGO_ENABLED: '1'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
-          cache: true
-      - run: go get
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-build
-          path: llm
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.os }}-${{ matrix.arch }}-build
-          path: llm
-      - run: go build
       - run: go test -v ./...
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}-binaries
-          path: ollama
+      - uses: golangci/golangci-lint-action@v3
