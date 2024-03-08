@@ -65,8 +65,12 @@ function init_vars {
     } else {
         $script:CMAKE_CUDA_ARCHITECTURES=$env:CMAKE_CUDA_ARCHITECTURES
     }
-    # Note: 10 Windows Kit signtool crashes with GCP's plugin
-    ${script:SignTool}="C:\Program Files (x86)\Windows Kits\8.1\bin\x64\signtool.exe"
+    # Note: Windows Kits 10 signtool crashes with GCP's plugin
+    if ($null -eq $env:SIGN_TOOL) {
+        ${script:SignTool}="C:\Program Files (x86)\Windows Kits\8.1\bin\x64\signtool.exe"
+    } else {
+        ${script:SignTool}=${env:SIGN_TOOL}
+    }
     if ("${env:KEY_CONTAINER}") {
         ${script:OLLAMA_CERT}=$(resolve-path "${script:SRC_DIR}\ollama_inc.crt")
     }
